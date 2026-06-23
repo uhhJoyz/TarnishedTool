@@ -70,19 +70,5 @@
             </TabControl.Template>
         </TabControl>
 
-        <Canvas x:Name="SoftwareCursorLayer"
-                Grid.RowSpan="3"
-                Panel.ZIndex="1000"
-                IsHitTestVisible="False"
-                Visibility="Visible">
-            <Path Fill="White"
-                  Stroke="Black"
-                  StrokeThickness="1"
-                  Data="M 0,0 L 0,20 L 5,15 L 9,24 L 13,22 L 9,14 L 16,14 Z">
-                <Path.RenderTransform>
-                    <TranslateTransform x:Name="SoftwareCursorTransform" />
-                </Path.RenderTransform>
-            </Path>
-        </Canvas>
     </Grid>
 </Window>

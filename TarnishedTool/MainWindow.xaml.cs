@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TarnishedTool.Enums;
@@ -186,8 +185,6 @@ namespace TarnishedTool
 
         private void Timer_Tick(object sender, EventArgs e)
         {
-            UpdateSoftwareCursorPosition();
-
             if (_memoryService.IsAttached)
             {
                 IsAttachedText.Text = "Attached to game";
@@ -310,23 +307,6 @@ namespace TarnishedTool
 
         private void CheckUpdate_Click(object sender, RoutedEventArgs e) =>
             VersionChecker.CheckForUpdates(this, true);
-
-        private void UpdateSoftwareCursorPosition()
-        {
-            if (RootGrid.ActualWidth == 0 || RootGrid.ActualHeight == 0) return;
-
-            var pos = Mouse.GetPosition(RootGrid);
-            var inBounds = pos.X >= 0 && pos.Y >= 0
-                           && pos.X <= RootGrid.ActualWidth && pos.Y <= RootGrid.ActualHeight;
-
-            SoftwareCursorLayer.Visibility = inBounds ? Visibility.Visible : Visibility.Collapsed;
-
-            if (inBounds)
-            {
-                SoftwareCursorTransform.X = pos.X;
-                SoftwareCursorTransform.Y = pos.Y;
-            }
-        }
 
         private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {

@@ -1,7 +1,10 @@
-﻿using System.Threading;
+﻿using System;
+using System.Threading;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Microsoft.Win32;
+using TarnishedTool.Memory;
 
 namespace TarnishedTool
 {
@@ -12,6 +15,12 @@ namespace TarnishedTool
     {
         
         private static Mutex _mutex;
+
+        static App()
+        {
+            ConfigureWineRendering();
+            RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+        }
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -27,6 +36,37 @@ namespace TarnishedTool
             }
 
             base.OnStartup(e);
-        }    
+        }
+
+        private static void ConfigureWineRendering()
+        {
+            if (!IsRunningUnderWine()) return;
+
+            try
+            {
+                using (var key = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\Microsoft\Avalon.Graphics"))
+                {
+                    key?.SetValue("DisableHWAcceleration", 1, RegistryValueKind.DWord);
+                }
+            }
+            catch
+            {
+                // Keep startup working if the Wine prefix registry is unavailable.
+            }
+        }
+
+        private static bool IsRunningUnderWine()
+        {
+            try
+            {
+                var ntdll = Kernel32.GetModuleHandle("ntdll.dll");
+                return ntdll != IntPtr.Zero &&
+                       Kernel32.GetProcAddress(ntdll, "wine_get_version") != IntPtr.Zero;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 }
