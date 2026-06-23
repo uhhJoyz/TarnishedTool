@@ -42,6 +42,23 @@ namespace TarnishedTool.Memory
             public IntPtr EntryPoint;
         }
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct ProcessEntry32
+        {
+            public uint DwSize;
+            public uint CntUsage;
+            public uint Th32ProcessId;
+            public IntPtr Th32DefaultHeapId;
+            public uint Th32ModuleId;
+            public uint CntThreads;
+            public uint Th32ParentProcessId;
+            public int PcPriClassBase;
+            public uint DwFlags;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string SzExeFile;
+        }
+
         [DllImport("kernel32.dll")]
         public static extern IntPtr OpenProcess(uint dwDesiredAcess, bool bInheritHandle, int dwProcessId);
 
@@ -62,6 +79,9 @@ namespace TarnishedTool.Memory
 
         [DllImport("kernel32.dll")]
         public static extern bool CloseHandle(IntPtr hObject);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetExitCodeProcess(IntPtr hProcess, out uint lpExitCode);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize,
@@ -85,6 +105,15 @@ namespace TarnishedTool.Memory
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern bool QueryFullProcessImageName(IntPtr hProcess, int dwFlags, StringBuilder lpExeName,
             ref int lpdwSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessId);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern bool Process32First(IntPtr hSnapshot, ref ProcessEntry32 lppe);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern bool Process32Next(IntPtr hSnapshot, ref ProcessEntry32 lppe);
 
         [DllImport("ntdll.dll")]
         public static extern int NtQueryInformationProcess(IntPtr processHandle, int processInformationClass,

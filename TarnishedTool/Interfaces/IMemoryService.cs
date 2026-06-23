@@ -10,6 +10,7 @@ public interface IMemoryService
 {
     public bool IsAttached { get; }
     public Process? TargetProcess { get; }
+    public int TargetProcessId { get; }
     public nint BaseAddress { get; }
     public int ModuleMemorySize { get; }
     public string? TargetFileVersion { get; }

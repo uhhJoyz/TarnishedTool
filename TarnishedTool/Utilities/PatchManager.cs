@@ -11,7 +11,7 @@ public static class PatchManager
 {
     public static bool Initialize(IMemoryService memoryService)
     {
-        if (memoryService.TargetProcess == null) return false;
+        if (!memoryService.IsAttached) return false;
         var fileVersion = memoryService.TargetFileVersion;
         var moduleBase = memoryService.BaseAddress;
         

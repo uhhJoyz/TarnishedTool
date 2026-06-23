@@ -15,6 +15,7 @@ namespace TarnishedTool.Services
     {
         public bool IsAttached { get; private set; }
         public Process? TargetProcess { get; private set; }
+        public int TargetProcessId { get; private set; }
         public IntPtr ProcessHandle { get; private set; } = IntPtr.Zero;
         public nint BaseAddress { get; private set; }
         public int ModuleMemorySize { get; private set; }
@@ -32,6 +33,8 @@ namespace TarnishedTool.Services
         private const uint PageNoAccess = 0x01;
         private const uint PageGuard = 0x100;
         private const uint ListModulesAll = 0x03;
+        private const uint Th32csSnapprocess = 0x00000002;
+        private const uint StillActive = 259;
         private const long EldenRingDefaultImageBase = 0x140000000;
         
         private const uint CodeCaveSize = 0x5000;
@@ -258,6 +261,7 @@ namespace TarnishedTool.Services
 
                 ProcessHandle = IntPtr.Zero;
                 TargetProcess = null;
+                TargetProcessId = 0;
                 TargetFileVersion = null;
                 BaseAddress = IntPtr.Zero;
                 ModuleMemorySize = 0;
@@ -273,11 +277,12 @@ namespace TarnishedTool.Services
         {
             if (ProcessHandle != IntPtr.Zero)
             {
-                if (TargetProcess == null || TargetProcess.HasExited)
+                if (!IsProcessRunning(ProcessHandle))
                 {
                     Kernel32.CloseHandle(ProcessHandle);
                     ProcessHandle = IntPtr.Zero;
                     TargetProcess = null;
+                    TargetProcessId = 0;
                     TargetFileVersion = null;
                     BaseAddress = IntPtr.Zero;
                     ModuleMemorySize = 0;
@@ -287,19 +292,20 @@ namespace TarnishedTool.Services
                 return;
             }
 
-            var processes = Process.GetProcessesByName(ProcessName);
-            if (processes.Length > 0 && !processes[0].HasExited)
+            if (TryFindTargetProcessId(out var processId))
             {
-                TargetProcess = processes[0];
+                TargetProcessId = checked((int)processId);
+                TargetProcess = TryGetManagedProcess(TargetProcessId);
                 ProcessHandle = Kernel32.OpenProcess(
                     ProcessVmRead | ProcessVmWrite | ProcessVmOperation | ProcessQueryInformation,
                     false,
-                    TargetProcess.Id);
+                    TargetProcessId);
 
                 if (ProcessHandle == IntPtr.Zero)
                 {
-                    Console.WriteLine($@"Attach failed: OpenProcess returned null for PID {TargetProcess.Id}");
+                    Console.WriteLine($@"Attach failed: OpenProcess returned null for Windows PID {TargetProcessId}");
                     TargetProcess = null;
+                    TargetProcessId = 0;
                     TargetFileVersion = null;
                     BaseAddress = IntPtr.Zero;
                     ModuleMemorySize = 0;
@@ -317,16 +323,74 @@ namespace TarnishedTool.Services
                     }
                     else
                     {
-                        Console.WriteLine($@"Attach failed: could not resolve module base for PID {TargetProcess.Id}");
+                        Console.WriteLine($@"Attach failed: could not resolve module base for Windows PID {TargetProcessId}");
                         Kernel32.CloseHandle(ProcessHandle);
                         ProcessHandle = IntPtr.Zero;
                         TargetProcess = null;
+                        TargetProcessId = 0;
                         TargetFileVersion = null;
                         BaseAddress = IntPtr.Zero;
                         ModuleMemorySize = 0;
                         IsAttached = false;
                     }
                 }
+            }
+        }
+
+        private static bool TryFindTargetProcessId(out uint processId)
+        {
+            processId = 0;
+
+            var snapshot = Kernel32.CreateToolhelp32Snapshot(Th32csSnapprocess, 0);
+            if (snapshot == new IntPtr(-1))
+            {
+                return false;
+            }
+
+            try
+            {
+                var processEntry = new Kernel32.ProcessEntry32
+                {
+                    DwSize = (uint)Marshal.SizeOf(typeof(Kernel32.ProcessEntry32))
+                };
+
+                if (!Kernel32.Process32First(snapshot, ref processEntry))
+                {
+                    return false;
+                }
+
+                do
+                {
+                    if (string.Equals(processEntry.SzExeFile, ProcessName, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(processEntry.SzExeFile, ProcessName + ".exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        processId = processEntry.Th32ProcessId;
+                        return true;
+                    }
+                } while (Kernel32.Process32Next(snapshot, ref processEntry));
+
+                return false;
+            }
+            finally
+            {
+                Kernel32.CloseHandle(snapshot);
+            }
+        }
+
+        private static bool IsProcessRunning(IntPtr processHandle)
+        {
+            return Kernel32.GetExitCodeProcess(processHandle, out var exitCode) && exitCode == StillActive;
+        }
+
+        private static Process TryGetManagedProcess(int processId)
+        {
+            try
+            {
+                return Process.GetProcessById(processId);
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -669,6 +733,7 @@ namespace TarnishedTool.Services
                     Kernel32.CloseHandle(ProcessHandle);
                     ProcessHandle = IntPtr.Zero;
                     TargetProcess = null;
+                    TargetProcessId = 0;
                     TargetFileVersion = null;
                     BaseAddress = IntPtr.Zero;
                     ModuleMemorySize = 0;

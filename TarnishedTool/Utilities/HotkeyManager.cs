@@ -61,11 +61,11 @@ public class HotkeyManager
 
     private bool IsGameFocused()
     {
-        if (_memoryService.TargetProcess == null || _memoryService.TargetProcess.Id == 0) return false;
+        if (_memoryService.TargetProcessId == 0) return false;
 
         IntPtr foregroundWindow = User32.GetForegroundWindow();
         User32.GetWindowThreadProcessId(foregroundWindow, out uint foregroundProcessId);
-        return foregroundProcessId == (uint)_memoryService.TargetProcess.Id;
+        return foregroundProcessId == (uint)_memoryService.TargetProcessId;
     }
 
     public void SetHotkey(string actionId, Keys keys)
