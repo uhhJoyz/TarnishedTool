@@ -31,7 +31,6 @@ namespace TarnishedTool
         public MainWindow()
         {
             _memoryService = new MemoryService();
-            _memoryService.StartAutoAttach();
             InitializeComponent();
             
             var savedLeft = SettingsManager.Default.WindowLeft;
@@ -172,6 +171,8 @@ namespace TarnishedTool
             {
                 VersionChecker.CheckForUpdates(this);
             }
+
+            _memoryService.StartAutoAttach();
         }
 
         private bool _loaded;

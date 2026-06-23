@@ -1,7 +1,5 @@
 ﻿using System;
-using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -38,6 +36,7 @@ namespace TarnishedTool.Services
 
         private const string ProcessName = "eldenring";
         private bool _disposed;
+        private bool _isAttachCheckRunning;
 
         private Timer _autoAttachTimer;
         
@@ -233,13 +232,39 @@ namespace TarnishedTool.Services
         {
             _autoAttachTimer = new Timer(AttachCheckInterval);
             _autoAttachTimer.Elapsed += (sender, e) => TryAttachToProcess();
-
-            TryAttachToProcess();
-
             _autoAttachTimer.Start();
         }
         
         private void TryAttachToProcess()
+        {
+            if (_isAttachCheckRunning) return;
+            _isAttachCheckRunning = true;
+
+            try
+            {
+                TryAttachToProcessCore();
+            }
+            catch
+            {
+                if (ProcessHandle != IntPtr.Zero)
+                {
+                    Kernel32.CloseHandle(ProcessHandle);
+                }
+
+                ProcessHandle = IntPtr.Zero;
+                TargetProcess = null;
+                TargetFileVersion = null;
+                BaseAddress = IntPtr.Zero;
+                ModuleMemorySize = 0;
+                IsAttached = false;
+            }
+            finally
+            {
+                _isAttachCheckRunning = false;
+            }
+        }
+
+        private void TryAttachToProcessCore()
         {
             if (ProcessHandle != IntPtr.Zero)
             {
@@ -277,7 +302,7 @@ namespace TarnishedTool.Services
                 }
                 else
                 {
-                    if (TryGetTargetModule(TargetProcess, ProcessHandle, out var module))
+                    if (TryGetTargetModule(ProcessHandle, out var module))
                     {
                         BaseAddress = module.BaseAddress;
                         ModuleMemorySize = module.ModuleMemorySize;
@@ -305,49 +330,10 @@ namespace TarnishedTool.Services
             public string FileVersion { get; set; }
         }
 
-        private static bool TryGetTargetModule(Process process, IntPtr processHandle, out TargetModuleInfo module)
+        private static bool TryGetTargetModule(IntPtr processHandle, out TargetModuleInfo module)
         {
             module = null;
-
-            try
-            {
-                var mainModule = process.MainModule;
-                if (IsTargetModule(mainModule))
-                {
-                    module = CreateTargetModuleInfo(mainModule);
-                    return true;
-                }
-            }
-            catch (Exception ex) when (IsModuleLookupException(ex))
-            {
-            }
-
             return TryGetTargetModuleFromPeb(processHandle, out module);
-        }
-
-        private static bool IsTargetModule(ProcessModule module)
-        {
-            if (module == null) return false;
-
-            var moduleName = module.ModuleName;
-            if (string.Equals(moduleName, ProcessName, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(moduleName, ProcessName + ".exe", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            var fileName = Path.GetFileNameWithoutExtension(module.FileName);
-            return string.Equals(fileName, ProcessName, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static TargetModuleInfo CreateTargetModuleInfo(ProcessModule module)
-        {
-            return new TargetModuleInfo
-            {
-                BaseAddress = module.BaseAddress,
-                ModuleMemorySize = module.ModuleMemorySize,
-                FileVersion = module.FileVersionInfo.FileVersion
-            };
         }
 
         private static bool TryGetTargetModuleFromPeb(IntPtr processHandle, out TargetModuleInfo module)
@@ -469,13 +455,6 @@ namespace TarnishedTool.Services
 
             return MemoryMarshal.Read<T>(bytes);
         }
-
-        private static bool IsModuleLookupException(Exception ex)
-            => ex is ArgumentException
-               || ex is ArgumentOutOfRangeException
-               || ex is InvalidOperationException
-               || ex is NotSupportedException
-               || ex is Win32Exception;
 
         private void Dispose()
         {
