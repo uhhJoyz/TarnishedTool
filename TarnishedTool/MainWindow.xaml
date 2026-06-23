@@ -9,7 +9,7 @@
         Foreground="{StaticResource TextBrush}"
         BorderBrush="{StaticResource BorderBrush}"
         WindowStyle="None"
-        AllowsTransparency="True"
+        AllowsTransparency="False"
         ResizeMode="NoResize">
     
     <Grid Margin="0">
