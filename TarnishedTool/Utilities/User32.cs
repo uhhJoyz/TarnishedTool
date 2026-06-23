@@ -20,12 +20,6 @@ namespace TarnishedTool.Utilities
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        public static extern IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
-
-        [DllImport("user32.dll")]
-        public static extern IntPtr SetCursor(IntPtr hCursor);
         
         public static void SetTopmost(IntPtr hwnd)
         {

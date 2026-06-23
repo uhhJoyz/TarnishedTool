@@ -49,22 +49,12 @@ namespace TarnishedTool
                 var stylusLogicType = stylusLogic.GetType();
                 while (devices.Count > 0)
                 {
-                    var tabletDevice = devices[0];
-                    var idProperty = tabletDevice.GetType().GetProperty(
-                        "Id",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    var tabletId = idProperty?.GetValue(tabletDevice);
-                    if (tabletId == null) return;
-
-                    var previousCount = devices.Count;
                     stylusLogicType.InvokeMember(
                         "OnTabletRemoved",
                         BindingFlags.InvokeMethod | BindingFlags.Instance | BindingFlags.NonPublic,
                         null,
                         stylusLogic,
-                        new[] { tabletId });
-
-                    if (devices.Count == previousCount) return;
+                        new object[] { (uint)0 });
                 }
             }
             catch
