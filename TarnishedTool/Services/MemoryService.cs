@@ -275,7 +275,7 @@ namespace TarnishedTool.Services
                 }
                 else
                 {
-                    if (TryGetTargetModule(TargetProcess, out var module))
+                    if (TryGetTargetModule(TargetProcess, ProcessHandle, out var module))
                     {
                         BaseAddress = module.BaseAddress;
                         ModuleMemorySize = module.ModuleMemorySize;
@@ -303,7 +303,7 @@ namespace TarnishedTool.Services
             public string FileVersion { get; set; }
         }
 
-        private static bool TryGetTargetModule(Process process, out TargetModuleInfo module)
+        private static bool TryGetTargetModule(Process process, IntPtr processHandle, out TargetModuleInfo module)
         {
             module = null;
 
@@ -335,7 +335,7 @@ namespace TarnishedTool.Services
             {
             }
 
-            return TryGetTargetModuleFromSnapshot(process.Id, out module);
+            return TryGetTargetModuleFromPeb(processHandle, out module);
         }
 
         private static bool IsTargetModule(ProcessModule module)
@@ -363,67 +363,50 @@ namespace TarnishedTool.Services
             };
         }
 
-        private static bool TryGetTargetModuleFromSnapshot(int processId, out TargetModuleInfo module)
+        private static bool TryGetTargetModuleFromPeb(IntPtr processHandle, out TargetModuleInfo module)
         {
             module = null;
 
-            var snapshot = Kernel32.CreateToolhelp32Snapshot(
-                Kernel32.Th32csSnapmodule | Kernel32.Th32csSnapmodule32,
-                (uint)processId);
-
-            if (snapshot == new IntPtr(-1))
-            {
-                return false;
-            }
-
             try
             {
-                var moduleEntry = new Kernel32.ModuleEntry32
-                {
-                    DwSize = (uint)Marshal.SizeOf(typeof(Kernel32.ModuleEntry32))
-                };
+                var processInfo = new Kernel32.ProcessBasicInformation();
+                var status = Kernel32.NtQueryInformationProcess(
+                    processHandle,
+                    0,
+                    ref processInfo,
+                    Marshal.SizeOf(typeof(Kernel32.ProcessBasicInformation)),
+                    out _);
 
-                if (!Kernel32.Module32First(snapshot, ref moduleEntry))
+                if (status != 0 || processInfo.PebBaseAddress == IntPtr.Zero)
                 {
                     return false;
                 }
 
-                do
+                var imageBaseAddressPtr = IntPtr.Add(processInfo.PebBaseAddress, IntPtr.Size * 2);
+                var imageBaseAddress = ReadRemote<IntPtr>(processHandle, imageBaseAddressPtr);
+                if (imageBaseAddress == IntPtr.Zero)
                 {
-                    if (IsTargetModule(moduleEntry))
-                    {
-                        module = new TargetModuleInfo
-                        {
-                            BaseAddress = moduleEntry.ModBaseAddr,
-                            ModuleMemorySize = checked((int)moduleEntry.ModBaseSize),
-                            FileVersion = GetFileVersion(moduleEntry.SzExePath)
-                        };
-                        return true;
-                    }
-                } while (Kernel32.Module32Next(snapshot, ref moduleEntry));
+                    return false;
+                }
 
-                return false;
-            }
-            catch (OverflowException)
-            {
-                return false;
-            }
-            finally
-            {
-                Kernel32.CloseHandle(snapshot);
-            }
-        }
+                var moduleMemorySize = ReadRemoteModuleMemorySize(processHandle, imageBaseAddress);
+                if (moduleMemorySize <= 0)
+                {
+                    return false;
+                }
 
-        private static bool IsTargetModule(Kernel32.ModuleEntry32 module)
-        {
-            if (string.Equals(module.SzModule, ProcessName, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(module.SzModule, ProcessName + ".exe", StringComparison.OrdinalIgnoreCase))
-            {
+                module = new TargetModuleInfo
+                {
+                    BaseAddress = imageBaseAddress,
+                    ModuleMemorySize = moduleMemorySize,
+                    FileVersion = null
+                };
                 return true;
             }
-
-            var fileName = Path.GetFileNameWithoutExtension(module.SzExePath);
-            return string.Equals(fileName, ProcessName, StringComparison.OrdinalIgnoreCase);
+            catch
+            {
+                return false;
+            }
         }
 
         private static string GetFileVersion(string filePath)
@@ -438,6 +421,52 @@ namespace TarnishedTool.Services
             {
                 return null;
             }
+        }
+
+        private static int ReadRemoteModuleMemorySize(IntPtr processHandle, IntPtr moduleBase)
+        {
+            const ushort DosSignature = 0x5A4D;
+            const uint PeSignature = 0x00004550;
+            const int DosHeaderLfanewOffset = 0x3C;
+            const int NtHeadersOptionalHeaderOffset = 0x18;
+            const int OptionalHeaderSizeOfImageOffset = 0x38;
+
+            var dosSignature = ReadRemote<ushort>(processHandle, moduleBase);
+            if (dosSignature != DosSignature)
+            {
+                return 0;
+            }
+
+            var peHeaderOffset = ReadRemote<int>(processHandle, IntPtr.Add(moduleBase, DosHeaderLfanewOffset));
+            if (peHeaderOffset <= 0)
+            {
+                return 0;
+            }
+
+            var ntHeaders = IntPtr.Add(moduleBase, peHeaderOffset);
+            var peSignature = ReadRemote<uint>(processHandle, ntHeaders);
+            if (peSignature != PeSignature)
+            {
+                return 0;
+            }
+
+            return ReadRemote<int>(
+                processHandle,
+                IntPtr.Add(ntHeaders, NtHeadersOptionalHeaderOffset + OptionalHeaderSizeOfImageOffset));
+        }
+
+        private static T ReadRemote<T>(IntPtr processHandle, IntPtr address) where T : unmanaged
+        {
+            var size = Unsafe.SizeOf<T>();
+            var bytes = new byte[size];
+            var bytesRead = 0;
+
+            if (!Kernel32.ReadProcessMemory(processHandle, address, bytes, size, ref bytesRead) || bytesRead != size)
+            {
+                throw new InvalidOperationException();
+            }
+
+            return MemoryMarshal.Read<T>(bytes);
         }
 
         private static bool IsModuleLookupException(Exception ex)
