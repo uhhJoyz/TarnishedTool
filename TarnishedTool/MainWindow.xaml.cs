@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TarnishedTool.Enums;
@@ -26,6 +27,7 @@ namespace TarnishedTool
         private static readonly IntPtr IdcArrow = new IntPtr(32512);
         private const int WmSetCursor = 0x0020;
         private const int WmMouseMove = 0x0200;
+        private const bool UseSoftwareCursor = true;
 
         private readonly IMemoryService _memoryService;
         private readonly IStateService _stateService;
@@ -195,17 +197,53 @@ namespace TarnishedTool
 
             if (msg == WmSetCursor)
             {
-                User32.SetCursor(_arrowCursor);
+                User32.SetCursor(UseSoftwareCursor ? IntPtr.Zero : _arrowCursor);
                 handled = true;
                 return new IntPtr(1);
             }
 
             if (msg == WmMouseMove)
             {
-                User32.SetCursor(_arrowCursor);
+                User32.SetCursor(UseSoftwareCursor ? IntPtr.Zero : _arrowCursor);
             }
 
             return IntPtr.Zero;
+        }
+
+        private void RootGrid_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (!UseSoftwareCursor) return;
+
+            SoftwareCursorLayer.Visibility = Visibility.Visible;
+            UpdateSoftwareCursor(e.GetPosition(RootGrid));
+            if (_arrowCursor != IntPtr.Zero) User32.SetCursor(IntPtr.Zero);
+        }
+
+        private void RootGrid_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (!UseSoftwareCursor) return;
+
+            SoftwareCursorLayer.Visibility = Visibility.Collapsed;
+            if (_arrowCursor != IntPtr.Zero) User32.SetCursor(_arrowCursor);
+        }
+
+        private void RootGrid_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!UseSoftwareCursor) return;
+
+            if (SoftwareCursorLayer.Visibility != Visibility.Visible)
+            {
+                SoftwareCursorLayer.Visibility = Visibility.Visible;
+            }
+
+            UpdateSoftwareCursor(e.GetPosition(RootGrid));
+            if (_arrowCursor != IntPtr.Zero) User32.SetCursor(IntPtr.Zero);
+        }
+
+        private void UpdateSoftwareCursor(Point position)
+        {
+            SoftwareCursorTransform.X = position.X;
+            SoftwareCursorTransform.Y = position.Y;
         }
 
         private bool _loaded;
