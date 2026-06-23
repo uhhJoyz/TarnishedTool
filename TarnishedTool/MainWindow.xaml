@@ -10,12 +10,10 @@
         BorderBrush="{StaticResource BorderBrush}"
         WindowStyle="SingleBorderWindow"
         AllowsTransparency="False"
-        ResizeMode="NoResize"
-        InputMethod.IsInputMethodEnabled="False">
-    
+        ResizeMode="NoResize">
+
     <Grid x:Name="RootGrid"
-          Margin="0"
-          InputMethod.IsInputMethodEnabled="False">
+          Margin="0">
         <Grid.RowDefinitions>
             
             <RowDefinition Height="0" />

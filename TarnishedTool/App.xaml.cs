@@ -15,6 +15,7 @@ namespace TarnishedTool
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            AppContext.SetSwitch("Switch.System.Windows.Input.Stylus.DisableStylusAndTouchSupport", true);
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
 
             const string appName = "TarnishedTool";
