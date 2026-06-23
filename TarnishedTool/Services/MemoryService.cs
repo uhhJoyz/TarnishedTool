@@ -36,6 +36,8 @@ namespace TarnishedTool.Services
         private const uint Th32csSnapprocess = 0x00000002;
         private const uint StillActive = 259;
         private const long EldenRingDefaultImageBase = 0x140000000;
+        private const int EldenRingFallbackModuleSize = 0;
+        private const string EldenRingFallbackFileVersion = "2.6.2.0";
         
         private const uint CodeCaveSize = 0x5000;
         private const int CodeCaveSearchStart = 0x40000000;
@@ -429,7 +431,14 @@ namespace TarnishedTool.Services
                 return true;
             }
 
-            return false;
+            module = new TargetModuleInfo
+            {
+                BaseAddress = new IntPtr(EldenRingDefaultImageBase),
+                ModuleMemorySize = EldenRingFallbackModuleSize,
+                FileVersion = GetProcessFileVersion(processHandle) ?? EldenRingFallbackFileVersion
+            };
+            Console.WriteLine($@"Attach module lookup: fallback image base 0x{EldenRingDefaultImageBase:X}");
+            return true;
         }
 
         private static bool TryGetTargetModuleFromPsapi(IntPtr processHandle, out TargetModuleInfo module)
