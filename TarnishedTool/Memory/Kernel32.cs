@@ -11,19 +11,6 @@ namespace TarnishedTool.Memory
         public const uint PageExecuteReadwrite = 0x40;
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct MemoryBasicInformation
-        {
-            public IntPtr BaseAddress;
-            public IntPtr AllocationBase;
-            public uint AllocationProtect;
-            public ushort PartitionId;
-            public IntPtr RegionSize;
-            public uint State;
-            public uint Protect;
-            public uint Type;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
         public struct ProcessBasicInformation
         {
             public IntPtr Reserved1;
@@ -32,14 +19,6 @@ namespace TarnishedTool.Memory
             public IntPtr Reserved3;
             public IntPtr UniqueProcessId;
             public IntPtr Reserved4;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct ModuleInfo
-        {
-            public IntPtr LpBaseOfDll;
-            public uint SizeOfImage;
-            public IntPtr EntryPoint;
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
@@ -92,10 +71,6 @@ namespace TarnishedTool.Memory
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool VirtualFreeEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint dwFreeType);
 
-        [DllImport("kernel32.dll")]
-        public static extern int VirtualQueryEx(IntPtr hProcess, IntPtr lpAddress,
-            out MemoryBasicInformation lpBuffer, uint dwLength);
-
         [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr GetModuleHandle(string lpModuleName);
 
@@ -119,20 +94,5 @@ namespace TarnishedTool.Memory
         public static extern int NtQueryInformationProcess(IntPtr processHandle, int processInformationClass,
             ref ProcessBasicInformation processInformation, int processInformationLength, out int returnLength);
 
-        [DllImport("psapi.dll", SetLastError = true)]
-        public static extern bool EnumProcessModulesEx(IntPtr hProcess, IntPtr[] lphModule, int cb,
-            out int lpcbNeeded, uint dwFilterFlag);
-
-        [DllImport("psapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        public static extern uint GetModuleBaseName(IntPtr hProcess, IntPtr hModule, StringBuilder lpBaseName,
-            int nSize);
-
-        [DllImport("psapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        public static extern uint GetModuleFileNameEx(IntPtr hProcess, IntPtr hModule, StringBuilder lpFilename,
-            int nSize);
-
-        [DllImport("psapi.dll", SetLastError = true)]
-        public static extern bool GetModuleInformation(IntPtr hProcess, IntPtr hModule, out ModuleInfo lpmodinfo,
-            int cb);
     }
 }
