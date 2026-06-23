@@ -24,10 +24,14 @@ namespace TarnishedTool.Services
         private const int ProcessVmWrite = 0x0020;
         private const int ProcessVmOperation = 0x0008;
         private const int ProcessQueryInformation = 0x0400;
-        private const int ProcessQueryLimitedInformation = 0x1000;
         private const int AttachCheckInterval = 2000; //MS
 
         private const uint MemRelease = 0x00008000;
+        private const uint MemCommitState = 0x1000;
+        private const uint MemImage = 0x1000000;
+        private const uint PageNoAccess = 0x01;
+        private const uint PageGuard = 0x100;
+        private const long EldenRingDefaultImageBase = 0x140000000;
         
         private const uint CodeCaveSize = 0x5000;
         private const int CodeCaveSearchStart = 0x40000000;
@@ -287,13 +291,13 @@ namespace TarnishedTool.Services
             {
                 TargetProcess = processes[0];
                 ProcessHandle = Kernel32.OpenProcess(
-                    ProcessVmRead | ProcessVmWrite | ProcessVmOperation | ProcessQueryInformation |
-                    ProcessQueryLimitedInformation,
+                    ProcessVmRead | ProcessVmWrite | ProcessVmOperation | ProcessQueryInformation,
                     false,
                     TargetProcess.Id);
 
                 if (ProcessHandle == IntPtr.Zero)
                 {
+                    Console.WriteLine($@"Attach failed: OpenProcess returned null for PID {TargetProcess.Id}");
                     TargetProcess = null;
                     TargetFileVersion = null;
                     BaseAddress = IntPtr.Zero;
@@ -308,9 +312,11 @@ namespace TarnishedTool.Services
                         ModuleMemorySize = module.ModuleMemorySize;
                         TargetFileVersion = module.FileVersion;
                         IsAttached = true;
+                        Console.WriteLine($@"Attached to {ProcessName}: base=0x{BaseAddress.ToInt64():X}, size=0x{ModuleMemorySize:X}, version={TargetFileVersion ?? "unknown"}");
                     }
                     else
                     {
+                        Console.WriteLine($@"Attach failed: could not resolve module base for PID {TargetProcess.Id}");
                         Kernel32.CloseHandle(ProcessHandle);
                         ProcessHandle = IntPtr.Zero;
                         TargetProcess = null;
@@ -333,7 +339,9 @@ namespace TarnishedTool.Services
         private static bool TryGetTargetModule(IntPtr processHandle, out TargetModuleInfo module)
         {
             module = null;
-            return TryGetTargetModuleFromPeb(processHandle, out module);
+            return TryGetTargetModuleFromPeb(processHandle, out module)
+                   || TryGetTargetModuleAtBase(processHandle, new IntPtr(EldenRingDefaultImageBase), out module)
+                   || TryGetTargetModuleFromVirtualMemory(processHandle, out module);
         }
 
         private static bool TryGetTargetModuleFromPeb(IntPtr processHandle, out TargetModuleInfo module)
@@ -408,6 +416,80 @@ namespace TarnishedTool.Services
             }
 
             return GetFileVersion(filePath.ToString());
+        }
+
+        private static bool TryGetTargetModuleFromVirtualMemory(IntPtr processHandle, out TargetModuleInfo module)
+        {
+            module = null;
+
+            const long MinAddress = 0x10000;
+            var maxAddress = IntPtr.Size == 8 ? 0x7FFFFFFEFFFFL : 0x7FFF0000L;
+
+            for (var address = MinAddress; address < maxAddress;)
+            {
+                if (Kernel32.VirtualQueryEx(
+                        processHandle,
+                        new IntPtr(address),
+                        out var memoryInfo,
+                        (uint)Marshal.SizeOf(typeof(Kernel32.MemoryBasicInformation))) == 0)
+                {
+                    address += 0x10000;
+                    continue;
+                }
+
+                var regionSize = memoryInfo.RegionSize.ToInt64();
+                if (regionSize <= 0)
+                {
+                    address += 0x10000;
+                    continue;
+                }
+
+                if (memoryInfo.State == MemCommitState &&
+                    memoryInfo.Type == MemImage &&
+                    (memoryInfo.Protect & (PageNoAccess | PageGuard)) == 0 &&
+                    TryGetTargetModuleAtBase(processHandle, memoryInfo.AllocationBase, out module))
+                {
+                    return true;
+                }
+
+                address = Math.Max(address + regionSize, address + 0x10000);
+            }
+
+            return false;
+        }
+
+        private static bool TryGetTargetModuleAtBase(
+            IntPtr processHandle,
+            IntPtr moduleBase,
+            out TargetModuleInfo module)
+        {
+            module = null;
+
+            if (moduleBase == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                var moduleMemorySize = ReadRemoteModuleMemorySize(processHandle, moduleBase);
+                if (moduleMemorySize <= 0)
+                {
+                    return false;
+                }
+
+                module = new TargetModuleInfo
+                {
+                    BaseAddress = moduleBase,
+                    ModuleMemorySize = moduleMemorySize,
+                    FileVersion = GetProcessFileVersion(processHandle)
+                };
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static int ReadRemoteModuleMemorySize(IntPtr processHandle, IntPtr moduleBase)
