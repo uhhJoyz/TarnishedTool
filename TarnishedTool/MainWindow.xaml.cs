@@ -186,6 +186,8 @@ namespace TarnishedTool
 
         private void Timer_Tick(object sender, EventArgs e)
         {
+            UpdateSoftwareCursorPosition();
+
             if (_memoryService.IsAttached)
             {
                 IsAttachedText.Text = "Attached to game";
@@ -309,28 +311,21 @@ namespace TarnishedTool
         private void CheckUpdate_Click(object sender, RoutedEventArgs e) =>
             VersionChecker.CheckForUpdates(this, true);
 
-        private void RootGrid_MouseEnter(object sender, MouseEventArgs e)
+        private void UpdateSoftwareCursorPosition()
         {
-            SoftwareCursorLayer.Visibility = Visibility.Visible;
-            UpdateSoftwareCursor(e.GetPosition(RootGrid));
-        }
+            if (RootGrid.ActualWidth == 0 || RootGrid.ActualHeight == 0) return;
 
-        private void RootGrid_MouseLeave(object sender, MouseEventArgs e)
-        {
-            SoftwareCursorLayer.Visibility = Visibility.Collapsed;
-        }
+            var pos = Mouse.GetPosition(RootGrid);
+            var inBounds = pos.X >= 0 && pos.Y >= 0
+                           && pos.X <= RootGrid.ActualWidth && pos.Y <= RootGrid.ActualHeight;
 
-        private void RootGrid_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (SoftwareCursorLayer.Visibility != Visibility.Visible)
-                SoftwareCursorLayer.Visibility = Visibility.Visible;
-            UpdateSoftwareCursor(e.GetPosition(RootGrid));
-        }
+            SoftwareCursorLayer.Visibility = inBounds ? Visibility.Visible : Visibility.Collapsed;
 
-        private void UpdateSoftwareCursor(Point position)
-        {
-            SoftwareCursorTransform.X = position.X;
-            SoftwareCursorTransform.Y = position.Y;
+            if (inBounds)
+            {
+                SoftwareCursorTransform.X = pos.X;
+                SoftwareCursorTransform.Y = pos.Y;
+            }
         }
 
         private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
