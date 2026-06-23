@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TarnishedTool.Enums;
@@ -307,6 +308,30 @@ namespace TarnishedTool
 
         private void CheckUpdate_Click(object sender, RoutedEventArgs e) =>
             VersionChecker.CheckForUpdates(this, true);
+
+        private void RootGrid_MouseEnter(object sender, MouseEventArgs e)
+        {
+            SoftwareCursorLayer.Visibility = Visibility.Visible;
+            UpdateSoftwareCursor(e.GetPosition(RootGrid));
+        }
+
+        private void RootGrid_MouseLeave(object sender, MouseEventArgs e)
+        {
+            SoftwareCursorLayer.Visibility = Visibility.Collapsed;
+        }
+
+        private void RootGrid_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (SoftwareCursorLayer.Visibility != Visibility.Visible)
+                SoftwareCursorLayer.Visibility = Visibility.Visible;
+            UpdateSoftwareCursor(e.GetPosition(RootGrid));
+        }
+
+        private void UpdateSoftwareCursor(Point position)
+        {
+            SoftwareCursorTransform.X = position.X;
+            SoftwareCursorTransform.Y = position.Y;
+        }
 
         private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
