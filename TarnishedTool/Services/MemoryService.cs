@@ -26,6 +26,7 @@ namespace TarnishedTool.Services
         private const int ProcessVmWrite = 0x0020;
         private const int ProcessVmOperation = 0x0008;
         private const int ProcessQueryInformation = 0x0400;
+        private const int ProcessQueryLimitedInformation = 0x1000;
         private const int AttachCheckInterval = 2000; //MS
 
         private const uint MemRelease = 0x00008000;
@@ -261,7 +262,8 @@ namespace TarnishedTool.Services
             {
                 TargetProcess = processes[0];
                 ProcessHandle = Kernel32.OpenProcess(
-                    ProcessVmRead | ProcessVmWrite | ProcessVmOperation | ProcessQueryInformation,
+                    ProcessVmRead | ProcessVmWrite | ProcessVmOperation | ProcessQueryInformation |
+                    ProcessQueryLimitedInformation,
                     false,
                     TargetProcess.Id);
 
@@ -314,21 +316,6 @@ namespace TarnishedTool.Services
                 {
                     module = CreateTargetModuleInfo(mainModule);
                     return true;
-                }
-            }
-            catch (Exception ex) when (IsModuleLookupException(ex))
-            {
-            }
-
-            try
-            {
-                foreach (ProcessModule processModule in process.Modules)
-                {
-                    if (IsTargetModule(processModule))
-                    {
-                        module = CreateTargetModuleInfo(processModule);
-                        return true;
-                    }
                 }
             }
             catch (Exception ex) when (IsModuleLookupException(ex))
@@ -399,7 +386,7 @@ namespace TarnishedTool.Services
                 {
                     BaseAddress = imageBaseAddress,
                     ModuleMemorySize = moduleMemorySize,
-                    FileVersion = null
+                    FileVersion = GetProcessFileVersion(processHandle)
                 };
                 return true;
             }
@@ -421,6 +408,20 @@ namespace TarnishedTool.Services
             {
                 return null;
             }
+        }
+
+        private static string GetProcessFileVersion(IntPtr processHandle)
+        {
+            const int MaxPath = 32767;
+
+            var size = MaxPath;
+            var filePath = new StringBuilder(size);
+            if (!Kernel32.QueryFullProcessImageName(processHandle, 0, filePath, ref size))
+            {
+                return null;
+            }
+
+            return GetFileVersion(filePath.ToString());
         }
 
         private static int ReadRemoteModuleMemorySize(IntPtr processHandle, IntPtr moduleBase)
