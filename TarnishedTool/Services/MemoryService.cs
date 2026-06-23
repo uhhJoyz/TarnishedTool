@@ -339,9 +339,26 @@ namespace TarnishedTool.Services
         private static bool TryGetTargetModule(IntPtr processHandle, out TargetModuleInfo module)
         {
             module = null;
-            return TryGetTargetModuleFromPeb(processHandle, out module)
-                   || TryGetTargetModuleAtBase(processHandle, new IntPtr(EldenRingDefaultImageBase), out module)
-                   || TryGetTargetModuleFromVirtualMemory(processHandle, out module);
+
+            if (TryGetTargetModuleFromPeb(processHandle, out module))
+            {
+                Console.WriteLine("Attach module lookup: PEB");
+                return true;
+            }
+
+            if (TryGetTargetModuleAtBase(processHandle, new IntPtr(EldenRingDefaultImageBase), out module))
+            {
+                Console.WriteLine("Attach module lookup: default image base");
+                return true;
+            }
+
+            if (TryGetTargetModuleFromVirtualMemory(processHandle, out module))
+            {
+                Console.WriteLine("Attach module lookup: virtual memory scan");
+                return true;
+            }
+
+            return false;
         }
 
         private static bool TryGetTargetModuleFromPeb(IntPtr processHandle, out TargetModuleInfo module)
@@ -530,7 +547,7 @@ namespace TarnishedTool.Services
             var bytes = new byte[size];
             var bytesRead = 0;
 
-            if (!Kernel32.ReadProcessMemory(processHandle, address, bytes, size, ref bytesRead) || bytesRead != size)
+            if (!Kernel32.ReadProcessMemory(processHandle, address, bytes, size, ref bytesRead))
             {
                 throw new InvalidOperationException();
             }

@@ -16,6 +16,7 @@ namespace TarnishedTool.Memory
             public IntPtr BaseAddress;
             public IntPtr AllocationBase;
             public uint AllocationProtect;
+            public ushort PartitionId;
             public IntPtr RegionSize;
             public uint State;
             public uint Protect;
