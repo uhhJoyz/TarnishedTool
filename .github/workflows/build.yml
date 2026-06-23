@@ -12,6 +12,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
       - name: Restore NuGet packages
         run: nuget restore TarnishedTool.sln
 
