@@ -1,0 +1,25 @@
+name: Build TarnishedTool
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Restore NuGet packages
+        run: nuget restore TarnishedTool.sln
+
+      - name: Build Release
+        run: msbuild TarnishedTool.sln /p:Configuration=Release /p:Platform="Any CPU"
+
+      - name: Upload Release output
+        uses: actions/upload-artifact@v4
+        with:
+          name: TarnishedTool-Release
+          path: TarnishedTool/bin/Release/

@@ -12,6 +12,7 @@ public interface IMemoryService
     public Process? TargetProcess { get; }
     public nint BaseAddress { get; }
     public int ModuleMemorySize { get; }
+    public string? TargetFileVersion { get; }
     
     string ReadString(nint addr, int maxLength = 32);
     byte[] ReadBytes(nint addr, int size);

@@ -12,11 +12,12 @@ public static class PatchManager
     public static bool Initialize(IMemoryService memoryService)
     {
         if (memoryService.TargetProcess == null) return false;
-        var module = memoryService.TargetProcess.MainModule;
-        var fileVersion = module?.FileVersionInfo.FileVersion;
+        var fileVersion = memoryService.TargetFileVersion;
         var moduleBase = memoryService.BaseAddress;
         
         Console.WriteLine($@"Patch: {fileVersion}");
+
+        if (string.IsNullOrEmpty(fileVersion)) return false;
 
         return Offsets.Initialize(fileVersion, moduleBase);
     }

@@ -1,5 +1,7 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -18,6 +20,7 @@ namespace TarnishedTool.Services
         public IntPtr ProcessHandle { get; private set; } = IntPtr.Zero;
         public nint BaseAddress { get; private set; }
         public int ModuleMemorySize { get; private set; }
+        public string? TargetFileVersion { get; private set; }
 
         private const int ProcessVmRead = 0x0010;
         private const int ProcessVmWrite = 0x0020;
@@ -244,6 +247,9 @@ namespace TarnishedTool.Services
                     Kernel32.CloseHandle(ProcessHandle);
                     ProcessHandle = IntPtr.Zero;
                     TargetProcess = null;
+                    TargetFileVersion = null;
+                    BaseAddress = IntPtr.Zero;
+                    ModuleMemorySize = 0;
                     IsAttached = false;
                 }
 
@@ -262,20 +268,88 @@ namespace TarnishedTool.Services
                 if (ProcessHandle == IntPtr.Zero)
                 {
                     TargetProcess = null;
+                    TargetFileVersion = null;
+                    BaseAddress = IntPtr.Zero;
+                    ModuleMemorySize = 0;
                     IsAttached = false;
                 }
                 else
                 {
-                    if (TargetProcess.MainModule != null)
+                    if (TryGetTargetModule(TargetProcess, out var module))
                     {
-                        BaseAddress = TargetProcess.MainModule.BaseAddress;
-                        ModuleMemorySize = TargetProcess.MainModule.ModuleMemorySize;
+                        BaseAddress = module.BaseAddress;
+                        ModuleMemorySize = module.ModuleMemorySize;
+                        TargetFileVersion = module.FileVersionInfo.FileVersion;
+                        IsAttached = true;
                     }
-
-                    IsAttached = true;
+                    else
+                    {
+                        Kernel32.CloseHandle(ProcessHandle);
+                        ProcessHandle = IntPtr.Zero;
+                        TargetProcess = null;
+                        TargetFileVersion = null;
+                        BaseAddress = IntPtr.Zero;
+                        ModuleMemorySize = 0;
+                        IsAttached = false;
+                    }
                 }
             }
         }
+
+        private static bool TryGetTargetModule(Process process, out ProcessModule module)
+        {
+            module = null;
+
+            try
+            {
+                module = process.MainModule;
+                if (IsTargetModule(module)) return true;
+            }
+            catch (Exception ex) when (IsModuleLookupException(ex))
+            {
+            }
+
+            try
+            {
+                foreach (ProcessModule processModule in process.Modules)
+                {
+                    if (IsTargetModule(processModule))
+                    {
+                        module = processModule;
+                        return true;
+                    }
+                }
+
+                module = process.Modules.Cast<ProcessModule>().FirstOrDefault();
+                return module != null;
+            }
+            catch (Exception ex) when (IsModuleLookupException(ex))
+            {
+                return false;
+            }
+        }
+
+        private static bool IsTargetModule(ProcessModule module)
+        {
+            if (module == null) return false;
+
+            var moduleName = module.ModuleName;
+            if (string.Equals(moduleName, ProcessName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(moduleName, ProcessName + ".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var fileName = Path.GetFileNameWithoutExtension(module.FileName);
+            return string.Equals(fileName, ProcessName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsModuleLookupException(Exception ex)
+            => ex is ArgumentException
+               || ex is ArgumentOutOfRangeException
+               || ex is InvalidOperationException
+               || ex is NotSupportedException
+               || ex is Win32Exception;
 
         private void Dispose()
         {
@@ -293,6 +367,9 @@ namespace TarnishedTool.Services
                     Kernel32.CloseHandle(ProcessHandle);
                     ProcessHandle = IntPtr.Zero;
                     TargetProcess = null;
+                    TargetFileVersion = null;
+                    BaseAddress = IntPtr.Zero;
+                    ModuleMemorySize = 0;
                     IsAttached = false;
                 }
 
