@@ -10,9 +10,11 @@
         BorderBrush="{StaticResource BorderBrush}"
         WindowStyle="SingleBorderWindow"
         AllowsTransparency="False"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        Cursor="Arrow"
+        ForceCursor="True">
     
-    <Grid Margin="0">
+    <Grid Margin="0" Cursor="Arrow" ForceCursor="True">
         <Grid.RowDefinitions>
             
             <RowDefinition Height="0" />
