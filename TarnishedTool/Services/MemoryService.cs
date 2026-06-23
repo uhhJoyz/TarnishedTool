@@ -312,7 +312,7 @@ namespace TarnishedTool.Services
                         ModuleMemorySize = module.ModuleMemorySize;
                         TargetFileVersion = module.FileVersion;
                         IsAttached = true;
-                        Console.WriteLine($@"Attached to {ProcessName}: base=0x{BaseAddress.ToInt64():X}, size=0x{ModuleMemorySize:X}, version={TargetFileVersion ?? "unknown"}");
+                        Console.WriteLine($@"Attached to {ProcessName}: base=0x{(long)BaseAddress:X}, size=0x{ModuleMemorySize:X}, version={TargetFileVersion ?? "unknown"}");
                     }
                     else
                     {
