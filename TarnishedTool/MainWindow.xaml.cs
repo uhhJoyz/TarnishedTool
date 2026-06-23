@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TarnishedTool.Enums;
@@ -22,16 +23,22 @@ namespace TarnishedTool
     /// </summary>
     public partial class MainWindow
     {
+        private static readonly IntPtr IdcArrow = new IntPtr(32512);
+        private const int WmSetCursor = 0x0020;
+        private const int WmMouseMove = 0x0200;
+
         private readonly IMemoryService _memoryService;
         private readonly IStateService _stateService;
         private readonly IDlcService _dlcService;
 
         private readonly DispatcherTimer _gameLoadedTimer;
+        private IntPtr _arrowCursor;
 
         public MainWindow()
         {
             _memoryService = new MemoryService();
             InitializeComponent();
+            SourceInitialized += MainWindow_SourceInitialized;
             
             var savedLeft = SettingsManager.Default.WindowLeft;
             var savedTop = SettingsManager.Default.WindowTop;
@@ -173,6 +180,32 @@ namespace TarnishedTool
             }
 
             _memoryService.StartAutoAttach();
+        }
+
+        private void MainWindow_SourceInitialized(object sender, EventArgs e)
+        {
+            _arrowCursor = User32.LoadCursor(IntPtr.Zero, IdcArrow);
+            var source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            source?.AddHook(WndProc);
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (_arrowCursor == IntPtr.Zero) return IntPtr.Zero;
+
+            if (msg == WmSetCursor)
+            {
+                User32.SetCursor(_arrowCursor);
+                handled = true;
+                return new IntPtr(1);
+            }
+
+            if (msg == WmMouseMove)
+            {
+                User32.SetCursor(_arrowCursor);
+            }
+
+            return IntPtr.Zero;
         }
 
         private bool _loaded;

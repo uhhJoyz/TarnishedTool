@@ -11,10 +11,9 @@
         WindowStyle="SingleBorderWindow"
         AllowsTransparency="False"
         ResizeMode="NoResize"
-        Cursor="Arrow"
-        ForceCursor="True">
+        InputMethod.IsInputMethodEnabled="False">
     
-    <Grid Margin="0" Cursor="Arrow" ForceCursor="True">
+    <Grid Margin="0" InputMethod.IsInputMethodEnabled="False">
         <Grid.RowDefinitions>
             
             <RowDefinition Height="0" />
