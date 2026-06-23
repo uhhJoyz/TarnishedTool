@@ -31,6 +31,7 @@ namespace TarnishedTool.Services
         private const uint MemImage = 0x1000000;
         private const uint PageNoAccess = 0x01;
         private const uint PageGuard = 0x100;
+        private const uint ListModulesAll = 0x03;
         private const long EldenRingDefaultImageBase = 0x140000000;
         
         private const uint CodeCaveSize = 0x5000;
@@ -346,6 +347,12 @@ namespace TarnishedTool.Services
                 return true;
             }
 
+            if (TryGetTargetModuleFromPsapi(processHandle, out module))
+            {
+                Console.WriteLine("Attach module lookup: PSAPI");
+                return true;
+            }
+
             if (TryGetTargetModuleAtBase(processHandle, new IntPtr(EldenRingDefaultImageBase), out module))
             {
                 Console.WriteLine("Attach module lookup: default image base");
@@ -359,6 +366,86 @@ namespace TarnishedTool.Services
             }
 
             return false;
+        }
+
+        private static bool TryGetTargetModuleFromPsapi(IntPtr processHandle, out TargetModuleInfo module)
+        {
+            module = null;
+
+            try
+            {
+                var modules = new IntPtr[1024];
+                var bytes = modules.Length * IntPtr.Size;
+                if (!Kernel32.EnumProcessModulesEx(processHandle, modules, bytes, out var bytesNeeded, ListModulesAll))
+                {
+                    return false;
+                }
+
+                var count = Math.Min(bytesNeeded / IntPtr.Size, modules.Length);
+                for (var i = 0; i < count; i++)
+                {
+                    var moduleHandle = modules[i];
+                    if (moduleHandle == IntPtr.Zero || !IsTargetModule(processHandle, moduleHandle))
+                    {
+                        continue;
+                    }
+
+                    if (TryCreateModuleInfoFromHandle(processHandle, moduleHandle, out module))
+                    {
+                        return true;
+                    }
+                }
+
+                if (count > 0 && TryCreateModuleInfoFromHandle(processHandle, modules[0], out module))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsTargetModule(IntPtr processHandle, IntPtr moduleHandle)
+        {
+            var moduleName = new StringBuilder(260);
+            if (Kernel32.GetModuleBaseName(processHandle, moduleHandle, moduleName, moduleName.Capacity) == 0)
+            {
+                return false;
+            }
+
+            return string.Equals(moduleName.ToString(), ProcessName, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(moduleName.ToString(), ProcessName + ".exe", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryCreateModuleInfoFromHandle(
+            IntPtr processHandle,
+            IntPtr moduleHandle,
+            out TargetModuleInfo module)
+        {
+            module = null;
+
+            if (!Kernel32.GetModuleInformation(
+                    processHandle,
+                    moduleHandle,
+                    out var moduleInfo,
+                    Marshal.SizeOf(typeof(Kernel32.ModuleInfo))) ||
+                moduleInfo.LpBaseOfDll == IntPtr.Zero ||
+                moduleInfo.SizeOfImage == 0)
+            {
+                return false;
+            }
+
+            module = new TargetModuleInfo
+            {
+                BaseAddress = moduleInfo.LpBaseOfDll,
+                ModuleMemorySize = checked((int)moduleInfo.SizeOfImage),
+                FileVersion = GetModuleFileVersion(processHandle, moduleHandle) ?? GetProcessFileVersion(processHandle)
+            };
+            return true;
         }
 
         private static bool TryGetTargetModuleFromPeb(IntPtr processHandle, out TargetModuleInfo module)
@@ -428,6 +515,17 @@ namespace TarnishedTool.Services
             var size = MaxPath;
             var filePath = new StringBuilder(size);
             if (!Kernel32.QueryFullProcessImageName(processHandle, 0, filePath, ref size))
+            {
+                return null;
+            }
+
+            return GetFileVersion(filePath.ToString());
+        }
+
+        private static string GetModuleFileVersion(IntPtr processHandle, IntPtr moduleHandle)
+        {
+            var filePath = new StringBuilder(32767);
+            if (Kernel32.GetModuleFileNameEx(processHandle, moduleHandle, filePath, filePath.Capacity) == 0)
             {
                 return null;
             }

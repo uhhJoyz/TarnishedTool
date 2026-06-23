@@ -34,6 +34,14 @@ namespace TarnishedTool.Memory
             public IntPtr Reserved4;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct ModuleInfo
+        {
+            public IntPtr LpBaseOfDll;
+            public uint SizeOfImage;
+            public IntPtr EntryPoint;
+        }
+
         [DllImport("kernel32.dll")]
         public static extern IntPtr OpenProcess(uint dwDesiredAcess, bool bInheritHandle, int dwProcessId);
 
@@ -81,5 +89,21 @@ namespace TarnishedTool.Memory
         [DllImport("ntdll.dll")]
         public static extern int NtQueryInformationProcess(IntPtr processHandle, int processInformationClass,
             ref ProcessBasicInformation processInformation, int processInformationLength, out int returnLength);
+
+        [DllImport("psapi.dll", SetLastError = true)]
+        public static extern bool EnumProcessModulesEx(IntPtr hProcess, IntPtr[] lphModule, int cb,
+            out int lpcbNeeded, uint dwFilterFlag);
+
+        [DllImport("psapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern uint GetModuleBaseName(IntPtr hProcess, IntPtr hModule, StringBuilder lpBaseName,
+            int nSize);
+
+        [DllImport("psapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern uint GetModuleFileNameEx(IntPtr hProcess, IntPtr hModule, StringBuilder lpFilename,
+            int nSize);
+
+        [DllImport("psapi.dll", SetLastError = true)]
+        public static extern bool GetModuleInformation(IntPtr hProcess, IntPtr hModule, out ModuleInfo lpmodinfo,
+            int cb);
     }
 }
