@@ -279,7 +279,7 @@ namespace TarnishedTool.Services
                     {
                         BaseAddress = module.BaseAddress;
                         ModuleMemorySize = module.ModuleMemorySize;
-                        TargetFileVersion = module.FileVersionInfo.FileVersion;
+                        TargetFileVersion = module.FileVersion;
                         IsAttached = true;
                     }
                     else
@@ -296,14 +296,25 @@ namespace TarnishedTool.Services
             }
         }
 
-        private static bool TryGetTargetModule(Process process, out ProcessModule module)
+        private sealed class TargetModuleInfo
+        {
+            public IntPtr BaseAddress { get; set; }
+            public int ModuleMemorySize { get; set; }
+            public string FileVersion { get; set; }
+        }
+
+        private static bool TryGetTargetModule(Process process, out TargetModuleInfo module)
         {
             module = null;
 
             try
             {
-                module = process.MainModule;
-                if (IsTargetModule(module)) return true;
+                var mainModule = process.MainModule;
+                if (IsTargetModule(mainModule))
+                {
+                    module = CreateTargetModuleInfo(mainModule);
+                    return true;
+                }
             }
             catch (Exception ex) when (IsModuleLookupException(ex))
             {
@@ -315,18 +326,16 @@ namespace TarnishedTool.Services
                 {
                     if (IsTargetModule(processModule))
                     {
-                        module = processModule;
+                        module = CreateTargetModuleInfo(processModule);
                         return true;
                     }
                 }
-
-                module = process.Modules.Cast<ProcessModule>().FirstOrDefault();
-                return module != null;
             }
             catch (Exception ex) when (IsModuleLookupException(ex))
             {
-                return false;
             }
+
+            return TryGetTargetModuleFromSnapshot(process.Id, out module);
         }
 
         private static bool IsTargetModule(ProcessModule module)
@@ -342,6 +351,93 @@ namespace TarnishedTool.Services
 
             var fileName = Path.GetFileNameWithoutExtension(module.FileName);
             return string.Equals(fileName, ProcessName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static TargetModuleInfo CreateTargetModuleInfo(ProcessModule module)
+        {
+            return new TargetModuleInfo
+            {
+                BaseAddress = module.BaseAddress,
+                ModuleMemorySize = module.ModuleMemorySize,
+                FileVersion = module.FileVersionInfo.FileVersion
+            };
+        }
+
+        private static bool TryGetTargetModuleFromSnapshot(int processId, out TargetModuleInfo module)
+        {
+            module = null;
+
+            var snapshot = Kernel32.CreateToolhelp32Snapshot(
+                Kernel32.Th32csSnapmodule | Kernel32.Th32csSnapmodule32,
+                (uint)processId);
+
+            if (snapshot == new IntPtr(-1))
+            {
+                return false;
+            }
+
+            try
+            {
+                var moduleEntry = new Kernel32.ModuleEntry32
+                {
+                    DwSize = (uint)Marshal.SizeOf(typeof(Kernel32.ModuleEntry32))
+                };
+
+                if (!Kernel32.Module32First(snapshot, ref moduleEntry))
+                {
+                    return false;
+                }
+
+                do
+                {
+                    if (IsTargetModule(moduleEntry))
+                    {
+                        module = new TargetModuleInfo
+                        {
+                            BaseAddress = moduleEntry.ModBaseAddr,
+                            ModuleMemorySize = checked((int)moduleEntry.ModBaseSize),
+                            FileVersion = GetFileVersion(moduleEntry.SzExePath)
+                        };
+                        return true;
+                    }
+                } while (Kernel32.Module32Next(snapshot, ref moduleEntry));
+
+                return false;
+            }
+            catch (OverflowException)
+            {
+                return false;
+            }
+            finally
+            {
+                Kernel32.CloseHandle(snapshot);
+            }
+        }
+
+        private static bool IsTargetModule(Kernel32.ModuleEntry32 module)
+        {
+            if (string.Equals(module.SzModule, ProcessName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(module.SzModule, ProcessName + ".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var fileName = Path.GetFileNameWithoutExtension(module.SzExePath);
+            return string.Equals(fileName, ProcessName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetFileVersion(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return null;
+
+            try
+            {
+                return FileVersionInfo.GetVersionInfo(filePath).FileVersion;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static bool IsModuleLookupException(Exception ex)
