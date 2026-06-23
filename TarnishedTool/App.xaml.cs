@@ -1,5 +1,6 @@
 ﻿using System.Threading;
 using System.Windows;
+using System.Windows.Interop;
 
 namespace TarnishedTool
 {
@@ -13,6 +14,8 @@ namespace TarnishedTool
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+
             const string appName = "TarnishedTool";
 
             _mutex = new Mutex(true, appName, out var createdNew);

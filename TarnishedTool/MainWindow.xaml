@@ -8,19 +8,19 @@
         Background="{StaticResource BackgroundBrush}"
         Foreground="{StaticResource TextBrush}"
         BorderBrush="{StaticResource BorderBrush}"
-        WindowStyle="None"
+        WindowStyle="SingleBorderWindow"
         AllowsTransparency="False"
         ResizeMode="NoResize">
     
     <Grid Margin="0">
         <Grid.RowDefinitions>
             
-            <RowDefinition Height="30" />
+            <RowDefinition Height="0" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         
-        <controls:TitleBar Title="Tarnished Tool" />
+        <controls:TitleBar Title="Tarnished Tool" Visibility="Collapsed" />
 
         <Grid Grid.Row="1" Margin="0,5,0,10">
             <Grid.ColumnDefinitions>
