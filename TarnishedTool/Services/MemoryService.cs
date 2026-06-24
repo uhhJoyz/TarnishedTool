@@ -31,7 +31,7 @@ namespace TarnishedTool.Services
         private const uint Th32csSnapprocess = 0x00000002;
         private const uint StillActive = 259;
         private const long EldenRingDefaultImageBase = 0x140000000;
-        private const int EldenRingFallbackModuleSize = 0;
+        private const int EldenRingFallbackModuleSize = 0x05000000;
         private const string EldenRingFallbackFileVersion = "2.6.2.0";
         
         private const uint CodeCaveSize = 0x5000;

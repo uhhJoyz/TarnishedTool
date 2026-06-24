@@ -181,6 +181,7 @@ namespace TarnishedTool
         private bool _hasPublishedLoaded;
         private bool _hasPublishedFadedIn;
         private bool _hasCheckedPatch;
+        private bool _hasScannedFallbackPatterns;
         private DateTime? _attachedTime;
 
         private void Timer_Tick(object sender, EventArgs e)
@@ -205,9 +206,7 @@ namespace TarnishedTool
                 {
                     if (!PatchManager.Initialize(_memoryService))
                     {
-                        var aobScanner = new AobScanner(_memoryService);
-                        aobScanner.QueueFallbackPatterns();
-                        aobScanner.Run();
+                        ScanFallbackPatterns("unknown patch version");
                     }
                     
 #if DEBUG
@@ -246,17 +245,27 @@ namespace TarnishedTool
                     _stateService.Publish(State.FirstLoaded);
                     _appliedOneTimeFeatures = true;
                 }
-                else if (_loaded)
+                else
                 {
-                    _stateService.Publish(State.NotLoaded);
-                    _loaded = false;
-                    _hasPublishedLoaded = false;
-                    _hasPublishedFadedIn = false;
+                    if (!_hasScannedFallbackPatterns)
+                    {
+                        ScanFallbackPatterns("static offsets did not resolve the loaded player");
+                        return;
+                    }
+
+                    if (_loaded)
+                    {
+                        _stateService.Publish(State.NotLoaded);
+                        _loaded = false;
+                        _hasPublishedLoaded = false;
+                        _hasPublishedFadedIn = false;
+                    }
                 }
             }
             else
             {
                 _hasCheckedPatch = false;
+                _hasScannedFallbackPatterns = false;
                 _loaded = false;
                 _attachedTime = null;
                 _hasAllocatedMemory = false;
@@ -272,6 +281,22 @@ namespace TarnishedTool
 
         private bool IsFadedIn() =>
             _memoryService.Read<byte>(_memoryService.Read<nint>(MenuMan.Base) + MenuMan.IsFading) == 0;
+
+        private void ScanFallbackPatterns(string reason)
+        {
+            if (_memoryService.ModuleMemorySize <= 0)
+            {
+                Console.WriteLine("AOB scan skipped: module size is unknown");
+                _hasScannedFallbackPatterns = true;
+                return;
+            }
+
+            Console.WriteLine($@"AOB scan: {reason}");
+            var aobScanner = new AobScanner(_memoryService);
+            aobScanner.QueueFallbackPatterns();
+            aobScanner.Run();
+            _hasScannedFallbackPatterns = true;
+        }
 
         private void CheckIfGameStart()
         {
