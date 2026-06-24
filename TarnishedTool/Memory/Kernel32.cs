@@ -38,6 +38,25 @@ namespace TarnishedTool.Memory
             public string SzExeFile;
         }
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct ModuleEntry32
+        {
+            public uint DwSize;
+            public uint Th32ModuleId;
+            public uint Th32ProcessId;
+            public uint GlblcntUsage;
+            public uint ProccntUsage;
+            public IntPtr ModBaseAddr;
+            public uint ModBaseSize;
+            public IntPtr HModule;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+            public string SzModule;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string SzExePath;
+        }
+
         [DllImport("kernel32.dll")]
         public static extern IntPtr OpenProcess(uint dwDesiredAcess, bool bInheritHandle, int dwProcessId);
 
@@ -89,6 +108,12 @@ namespace TarnishedTool.Memory
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern bool Process32Next(IntPtr hSnapshot, ref ProcessEntry32 lppe);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern bool Module32First(IntPtr hSnapshot, ref ModuleEntry32 lpme);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern bool Module32Next(IntPtr hSnapshot, ref ModuleEntry32 lpme);
 
         [DllImport("ntdll.dll")]
         public static extern int NtQueryInformationProcess(IntPtr processHandle, int processInformationClass,

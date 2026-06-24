@@ -30,10 +30,10 @@ namespace TarnishedTool.Services
 
         private const uint MemRelease = 0x00008000;
         private const uint Th32csSnapprocess = 0x00000002;
+        private const uint Th32csSnapmodule = 0x00000008;
+        private const uint Th32csSnapmodule32 = 0x00000010;
         private const uint StillActive = 259;
         private const long EldenRingDefaultImageBase = 0x140000000;
-        private const int EldenRingFallbackModuleSize = 0x05000000;
-        private const string EldenRingFallbackFileVersion = "2.6.2.0";
         
         private const uint CodeCaveSize = 0x5000;
         private const int CodeCaveSearchStart = 0x40000000;
@@ -330,7 +330,7 @@ namespace TarnishedTool.Services
                 }
                 else
                 {
-                    if (TryGetTargetModule(ProcessHandle, out var module))
+                    if (TryGetTargetModule(ProcessHandle, processId, out var module))
                     {
                         BaseAddress = module.BaseAddress;
                         ModuleMemorySize = module.ModuleMemorySize;
@@ -418,7 +418,7 @@ namespace TarnishedTool.Services
             public string FileVersion { get; set; }
         }
 
-        private static bool TryGetTargetModule(IntPtr processHandle, out TargetModuleInfo module)
+        private static bool TryGetTargetModule(IntPtr processHandle, uint processId, out TargetModuleInfo module)
         {
             module = null;
 
@@ -428,20 +428,94 @@ namespace TarnishedTool.Services
                 return true;
             }
 
+            if (TryGetTargetModuleFromSnapshot(processId, processHandle, out module))
+            {
+                Console.WriteLine("Attach module lookup: Toolhelp module snapshot");
+                return true;
+            }
+
             if (TryGetTargetModuleAtBase(processHandle, new IntPtr(EldenRingDefaultImageBase), out module))
             {
                 Console.WriteLine("Attach module lookup: default image base");
                 return true;
             }
 
-            module = new TargetModuleInfo
+            Console.WriteLine("Attach module lookup failed: no readable Elden Ring module found");
+            return false;
+        }
+
+        private static bool TryGetTargetModuleFromSnapshot(
+            uint processId,
+            IntPtr processHandle,
+            out TargetModuleInfo module)
+        {
+            module = null;
+
+            var snapshot = Kernel32.CreateToolhelp32Snapshot(
+                Th32csSnapmodule | Th32csSnapmodule32,
+                processId);
+            if (snapshot == new IntPtr(-1))
             {
-                BaseAddress = new IntPtr(EldenRingDefaultImageBase),
-                ModuleMemorySize = EldenRingFallbackModuleSize,
-                FileVersion = GetProcessFileVersion(processHandle) ?? EldenRingFallbackFileVersion
-            };
-            Console.WriteLine($@"Attach module lookup: fallback image base 0x{EldenRingDefaultImageBase:X}");
-            return true;
+                return false;
+            }
+
+            try
+            {
+                var moduleEntry = new Kernel32.ModuleEntry32
+                {
+                    DwSize = (uint)Marshal.SizeOf(typeof(Kernel32.ModuleEntry32))
+                };
+
+                if (!Kernel32.Module32First(snapshot, ref moduleEntry))
+                {
+                    return false;
+                }
+
+                do
+                {
+                    if (!IsTargetModuleName(moduleEntry.SzModule) &&
+                        !IsTargetModuleName(System.IO.Path.GetFileName(moduleEntry.SzExePath)))
+                    {
+                        continue;
+                    }
+
+                    var moduleSize = checked((int)moduleEntry.ModBaseSize);
+                    if (moduleEntry.ModBaseAddr == IntPtr.Zero || moduleSize <= 0)
+                    {
+                        continue;
+                    }
+
+                    var headerSize = ReadRemoteModuleMemorySize(processHandle, moduleEntry.ModBaseAddr);
+                    if (headerSize <= 0)
+                    {
+                        continue;
+                    }
+
+                    module = new TargetModuleInfo
+                    {
+                        BaseAddress = moduleEntry.ModBaseAddr,
+                        ModuleMemorySize = headerSize,
+                        FileVersion = GetFileVersion(moduleEntry.SzExePath) ?? GetProcessFileVersion(processHandle)
+                    };
+                    return true;
+                } while (Kernel32.Module32Next(snapshot, ref moduleEntry));
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                Kernel32.CloseHandle(snapshot);
+            }
+        }
+
+        private static bool IsTargetModuleName(string moduleName)
+        {
+            return string.Equals(moduleName, ProcessName, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(moduleName, ProcessName + ".exe", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool TryGetTargetModuleFromPeb(IntPtr processHandle, out TargetModuleInfo module)
