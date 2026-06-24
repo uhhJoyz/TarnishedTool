@@ -26,6 +26,7 @@ namespace TarnishedTool.Services
         private const int ProcessVmOperation = 0x0008;
         private const int ProcessQueryInformation = 0x0400;
         private const int AttachCheckInterval = 2000; //MS
+        private const int MaxReadChunkSize = 0x10000;
 
         private const uint MemRelease = 0x00008000;
         private const uint Th32csSnapprocess = 0x00000002;
@@ -72,8 +73,27 @@ namespace TarnishedTool.Services
         public byte[] ReadBytes(IntPtr addr, int size)
         {
             var array = new byte[size];
-            var lpNumberOfBytesRead = 1;
-            Kernel32.ReadProcessMemory(ProcessHandle, addr, array, size, ref lpNumberOfBytesRead);
+
+            if (size <= MaxReadChunkSize)
+            {
+                var bytesRead = 0;
+                Kernel32.ReadProcessMemory(ProcessHandle, addr, array, size, ref bytesRead);
+                return array;
+            }
+
+            for (var offset = 0; offset < size; offset += MaxReadChunkSize)
+            {
+                var chunkSize = Math.Min(MaxReadChunkSize, size - offset);
+                var chunk = new byte[chunkSize];
+                var bytesRead = 0;
+                if (!Kernel32.ReadProcessMemory(ProcessHandle, IntPtr.Add(addr, offset), chunk, chunkSize, ref bytesRead))
+                {
+                    continue;
+                }
+
+                Array.Copy(chunk, 0, array, offset, Math.Min(bytesRead, chunkSize));
+            }
+
             return array;
         }
 

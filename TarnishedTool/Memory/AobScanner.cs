@@ -1,14 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using TarnishedTool.Interfaces;
 using static TarnishedTool.Memory.Offsets;
-#if DEBUG
-using System.Diagnostics;
-#endif
 
 namespace TarnishedTool.Memory
 {
@@ -316,8 +314,8 @@ namespace TarnishedTool.Memory
 
 #if DEBUG
             LogAnchors();
-            var scan = Stopwatch.StartNew();
 #endif
+            var scan = Stopwatch.StartNew();
             var buf = _module!;
             var bufLen = buf.Length;
             var end = bufLen - 1; 
@@ -388,12 +386,10 @@ namespace TarnishedTool.Memory
 
             WriteSavedAddresses();
 
-#if DEBUG
             scan.Stop();
             var foundCount = _requests.Count - remaining;
             Console.WriteLine(
                 $"[AobScanner] scan done in {scan.ElapsedMilliseconds} ms ({foundCount}/{_requests.Count} found)");
-#endif
         }
 
         private static bool Matches(ref byte bufRef, int bufLen, int start, Request req)

@@ -296,6 +296,18 @@ namespace TarnishedTool
             aobScanner.QueueFallbackPatterns();
             aobScanner.Run();
             _hasScannedFallbackPatterns = true;
+            LogLoadedPointers();
+        }
+
+        private void LogLoadedPointers()
+        {
+            var worldChrMan = _memoryService.Read<nint>(WorldChrMan.Base);
+            var playerIns = worldChrMan == 0
+                ? 0
+                : _memoryService.Read<nint>(worldChrMan + WorldChrMan.PlayerIns);
+
+            Console.WriteLine(
+                $@"Loaded check: WorldChrMan.Base=0x{(long)WorldChrMan.Base:X}, WorldChrMan=0x{(long)worldChrMan:X}, PlayerIns=0x{(long)playerIns:X}");
         }
 
         private void CheckIfGameStart()
