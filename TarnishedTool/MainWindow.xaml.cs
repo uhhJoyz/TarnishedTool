@@ -291,15 +291,21 @@ namespace TarnishedTool
                 return;
             }
 
+            LogLoadedPointers("before AOB scan");
             Console.WriteLine($@"AOB scan: {reason}");
             var aobScanner = new AobScanner(_memoryService);
             aobScanner.QueueFallbackPatterns();
-            aobScanner.Run();
+            var foundCount = aobScanner.Run();
             _hasScannedFallbackPatterns = true;
-            LogLoadedPointers();
+            if (foundCount == 0)
+            {
+                Console.WriteLine("AOB scan found no patterns; keeping existing static offsets");
+            }
+
+            LogLoadedPointers("after AOB scan");
         }
 
-        private void LogLoadedPointers()
+        private void LogLoadedPointers(string context)
         {
             var worldChrMan = _memoryService.Read<nint>(WorldChrMan.Base);
             var playerIns = worldChrMan == 0
@@ -307,7 +313,7 @@ namespace TarnishedTool
                 : _memoryService.Read<nint>(worldChrMan + WorldChrMan.PlayerIns);
 
             Console.WriteLine(
-                $@"Loaded check: WorldChrMan.Base=0x{(long)WorldChrMan.Base:X}, WorldChrMan=0x{(long)worldChrMan:X}, PlayerIns=0x{(long)playerIns:X}");
+                $@"Loaded check ({context}): WorldChrMan.Base=0x{(long)WorldChrMan.Base:X}, WorldChrMan=0x{(long)worldChrMan:X}, PlayerIns=0x{(long)playerIns:X}");
         }
 
         private void CheckIfGameStart()

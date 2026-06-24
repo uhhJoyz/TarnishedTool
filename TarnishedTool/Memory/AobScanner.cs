@@ -64,6 +64,11 @@ namespace TarnishedTool.Memory
         {
             _moduleBase = memoryService.BaseAddress;
             _module = memoryService.ReadBytes(_moduleBase, memoryService.ModuleMemorySize);
+            var nonZeroBytes = _module.Count(b => b != 0);
+            var b0 = _module.Length > 0 ? _module[0] : 0;
+            var b1 = _module.Length > 1 ? _module[1] : 0;
+            Console.WriteLine(
+                $@"[AobScanner] loaded module: base=0x{(long)_moduleBase:X}, size=0x{_module.Length:X}, first={b0:X2} {b1:X2}, nonzero={nonZeroBytes}");
         }
         
         public void QueueFallbackPatterns()
@@ -306,7 +311,7 @@ namespace TarnishedTool.Memory
             return marginal;
         }
 
-        public void Run()
+        public int Run()
         {
             if (_module is null) LoadModule();
             LoadSavedAddresses();
@@ -377,7 +382,6 @@ namespace TarnishedTool.Memory
                 }
                 else
                 {
-                    req.Setter(0);
 #if DEBUG
                     Console.WriteLine($"[AobScanner] MISS (no saved): {req.Name}");
 #endif
@@ -390,6 +394,7 @@ namespace TarnishedTool.Memory
             var foundCount = _requests.Count - remaining;
             Console.WriteLine(
                 $"[AobScanner] scan done in {scan.ElapsedMilliseconds} ms ({foundCount}/{_requests.Count} found)");
+            return foundCount;
         }
 
         private static bool Matches(ref byte bufRef, int bufLen, int start, Request req)
