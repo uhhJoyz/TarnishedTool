@@ -18,7 +18,7 @@
         <LangVersion>12</LangVersion>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-        <PlatformTarget>AnyCPU</PlatformTarget>
+        <PlatformTarget>x64</PlatformTarget>
         <DebugSymbols>true</DebugSymbols>
         <DebugType>full</DebugType>
         <Optimize>false</Optimize>
@@ -28,9 +28,10 @@
         <WarningLevel>4</WarningLevel>
         <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
         <Prefer32bit>false</Prefer32bit>
+        <Prefer32Bit>false</Prefer32Bit>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-        <PlatformTarget>AnyCPU</PlatformTarget>
+        <PlatformTarget>x64</PlatformTarget>
         <DebugType>pdbonly</DebugType>
         <Optimize>true</Optimize>
         <OutputPath>bin\Release\</OutputPath>
@@ -39,6 +40,7 @@
         <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
         <WarningLevel>4</WarningLevel>
         <Prefer32bit>false</Prefer32bit>
+        <Prefer32Bit>false</Prefer32Bit>
     </PropertyGroup>
     <ItemGroup>
         <Reference Include="Costura, Version=6.0.0.0, Culture=neutral, PublicKeyToken=9919ef960d84173d, processorArchitecture=MSIL">

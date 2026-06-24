@@ -25,6 +25,7 @@ namespace TarnishedTool
         protected override void OnStartup(StartupEventArgs e)
         {
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+            Console.WriteLine($@"Runtime: Is64BitProcess={Environment.Is64BitProcess}, Is64BitOperatingSystem={Environment.Is64BitOperatingSystem}");
 
             const string appName = "TarnishedTool";
 
