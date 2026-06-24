@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
@@ -34,12 +33,6 @@ namespace TarnishedTool.Services
         private const uint Th32csSnapmodule = 0x00000008;
         private const uint Th32csSnapmodule32 = 0x00000010;
         private const uint StillActive = 259;
-        private const uint MemCommitState = 0x1000;
-        private const uint PageNoAccess = 0x01;
-        private const uint PageGuard = 0x100;
-        private const long MaxUserAddress = 0x7FFFFFFF0000;
-        private const int MaxMemoryMapRegions = 25000;
-        private const int MaxMemoryMapScanMilliseconds = 3000;
         private const int MinimumMainModuleSize = 0x01000000;
         private const long EldenRingDefaultImageBase = 0x140000000;
         
@@ -445,13 +438,6 @@ namespace TarnishedTool.Services
                 return true;
             }
 
-            Console.WriteLine("Attach module lookup: trying virtual memory map");
-            if (TryGetTargetModuleFromMemoryMap(processHandle, out module))
-            {
-                Console.WriteLine("Attach module lookup: virtual memory map");
-                return true;
-            }
-
             Console.WriteLine("Attach module lookup: trying default image base");
             if (TryGetTargetModuleAtBase(processHandle, new IntPtr(EldenRingDefaultImageBase), out module))
             {
@@ -461,83 +447,6 @@ namespace TarnishedTool.Services
 
             Console.WriteLine("Attach module lookup failed: no readable Elden Ring module found");
             return false;
-        }
-
-        private static bool TryGetTargetModuleFromMemoryMap(IntPtr processHandle, out TargetModuleInfo module)
-        {
-            module = null;
-
-            var mbiSize = new IntPtr(Marshal.SizeOf(typeof(Kernel32.MemoryBasicInformation)));
-            var seenAllocations = new HashSet<IntPtr>();
-            var address = IntPtr.Zero;
-            TargetModuleInfo best = null;
-            var regions = 0;
-            var readableAllocations = 0;
-            var peCandidates = 0;
-            var scan = Stopwatch.StartNew();
-
-            while (address.ToInt64() >= 0 &&
-                   address.ToInt64() < MaxUserAddress &&
-                   regions < MaxMemoryMapRegions &&
-                   scan.ElapsedMilliseconds < MaxMemoryMapScanMilliseconds)
-            {
-                if (Kernel32.VirtualQueryEx(processHandle, address, out var mbi, mbiSize) == IntPtr.Zero)
-                {
-                    break;
-                }
-
-                regions++;
-                var regionSize = mbi.RegionSize.ToInt64();
-                if (regionSize <= 0)
-                {
-                    break;
-                }
-
-                var allocationBase = mbi.AllocationBase != IntPtr.Zero ? mbi.AllocationBase : mbi.BaseAddress;
-                if (IsReadableRegion(mbi) && seenAllocations.Add(allocationBase))
-                {
-                    readableAllocations++;
-                    var moduleSize = ReadRemoteModuleMemorySize(processHandle, allocationBase);
-                    if (moduleSize >= MinimumMainModuleSize &&
-                        (best == null || moduleSize > best.ModuleMemorySize))
-                    {
-                        peCandidates++;
-                        best = new TargetModuleInfo
-                        {
-                            BaseAddress = allocationBase,
-                            ModuleMemorySize = moduleSize,
-                            FileVersion = GetProcessFileVersion(processHandle)
-                        };
-                    }
-                }
-
-                var next = mbi.BaseAddress.ToInt64() + regionSize;
-                if (next <= address.ToInt64())
-                {
-                    break;
-                }
-
-                address = new IntPtr(next);
-            }
-
-            scan.Stop();
-            Console.WriteLine(
-                $@"Attach module lookup: memory map scanned {regions} regions, {readableAllocations} readable allocations, {peCandidates} PE candidates in {scan.ElapsedMilliseconds} ms");
-
-            if (best == null)
-            {
-                return false;
-            }
-
-            module = best;
-            return true;
-        }
-
-        private static bool IsReadableRegion(Kernel32.MemoryBasicInformation mbi)
-        {
-            return mbi.State == MemCommitState &&
-                   (mbi.Protect & PageNoAccess) == 0 &&
-                   (mbi.Protect & PageGuard) == 0;
         }
 
         private static bool TryGetTargetModuleFromSnapshot(
@@ -567,15 +476,17 @@ namespace TarnishedTool.Services
                     return false;
                 }
 
+                TargetModuleInfo bestReadableModule = null;
+                var moduleCount = 0;
+                var readableModuleCount = 0;
+
                 do
                 {
-                    if (!IsTargetModuleName(moduleEntry.SzModule) &&
-                        !IsTargetModuleName(System.IO.Path.GetFileName(moduleEntry.SzExePath)))
-                    {
-                        continue;
-                    }
+                    moduleCount++;
 
-                    var moduleSize = checked((int)moduleEntry.ModBaseSize);
+                    var moduleSize = moduleEntry.ModBaseSize > int.MaxValue
+                        ? int.MaxValue
+                        : (int)moduleEntry.ModBaseSize;
                     if (moduleEntry.ModBaseAddr == IntPtr.Zero || moduleSize <= 0)
                     {
                         continue;
@@ -587,14 +498,38 @@ namespace TarnishedTool.Services
                         continue;
                     }
 
-                    module = new TargetModuleInfo
+                    readableModuleCount++;
+                    var candidate = new TargetModuleInfo
                     {
                         BaseAddress = moduleEntry.ModBaseAddr,
                         ModuleMemorySize = headerSize,
                         FileVersion = GetFileVersion(moduleEntry.SzExePath) ?? GetProcessFileVersion(processHandle)
                     };
-                    return true;
+
+                    if (IsTargetModuleName(moduleEntry.SzModule) ||
+                        IsTargetModuleName(System.IO.Path.GetFileName(moduleEntry.SzExePath)))
+                    {
+                        Console.WriteLine(
+                            $@"Attach module lookup: matched module {moduleEntry.SzModule} at 0x{(long)moduleEntry.ModBaseAddr:X}, size=0x{headerSize:X}");
+                        module = candidate;
+                        return true;
+                    }
+
+                    if (headerSize >= MinimumMainModuleSize &&
+                        (bestReadableModule == null || headerSize > bestReadableModule.ModuleMemorySize))
+                    {
+                        bestReadableModule = candidate;
+                    }
                 } while (Kernel32.Module32Next(snapshot, ref moduleEntry));
+
+                Console.WriteLine(
+                    $@"Attach module lookup: Toolhelp inspected {moduleCount} modules, {readableModuleCount} readable PE modules");
+
+                if (bestReadableModule != null)
+                {
+                    module = bestReadableModule;
+                    return true;
+                }
 
                 return false;
             }

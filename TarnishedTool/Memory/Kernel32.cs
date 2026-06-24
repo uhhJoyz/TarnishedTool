@@ -57,19 +57,6 @@ namespace TarnishedTool.Memory
             public string SzExePath;
         }
 
-        [StructLayout(LayoutKind.Sequential)]
-        public struct MemoryBasicInformation
-        {
-            public IntPtr BaseAddress;
-            public IntPtr AllocationBase;
-            public uint AllocationProtect;
-            public ushort PartitionId;
-            public IntPtr RegionSize;
-            public uint State;
-            public uint Protect;
-            public uint Type;
-        }
-
         [DllImport("kernel32.dll")]
         public static extern IntPtr OpenProcess(uint dwDesiredAcess, bool bInheritHandle, int dwProcessId);
 
@@ -102,10 +89,6 @@ namespace TarnishedTool.Memory
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool VirtualFreeEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint dwFreeType);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern IntPtr VirtualQueryEx(IntPtr hProcess, IntPtr lpAddress,
-            out MemoryBasicInformation lpBuffer, IntPtr dwLength);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr GetModuleHandle(string lpModuleName);
