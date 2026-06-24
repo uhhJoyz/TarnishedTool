@@ -38,6 +38,8 @@ namespace TarnishedTool.Services
         private const uint PageNoAccess = 0x01;
         private const uint PageGuard = 0x100;
         private const long MaxUserAddress = 0x7FFFFFFF0000;
+        private const int MaxMemoryMapRegions = 25000;
+        private const int MaxMemoryMapScanMilliseconds = 3000;
         private const int MinimumMainModuleSize = 0x01000000;
         private const long EldenRingDefaultImageBase = 0x140000000;
         
@@ -318,6 +320,7 @@ namespace TarnishedTool.Services
             if (TryFindTargetProcessId(out var processId))
             {
                 TargetProcessId = checked((int)processId);
+                Console.WriteLine($@"Attach target process found: Windows PID {TargetProcessId}");
                 TargetProcess = TryGetManagedProcess(TargetProcessId);
                 ProcessHandle = Kernel32.OpenProcess(
                     ProcessVmRead | ProcessVmWrite | ProcessVmOperation | ProcessQueryInformation,
@@ -428,24 +431,28 @@ namespace TarnishedTool.Services
         {
             module = null;
 
+            Console.WriteLine("Attach module lookup: trying PEB");
             if (TryGetTargetModuleFromPeb(processHandle, out module))
             {
                 Console.WriteLine("Attach module lookup: PEB");
                 return true;
             }
 
+            Console.WriteLine("Attach module lookup: trying Toolhelp module snapshot");
             if (TryGetTargetModuleFromSnapshot(processId, processHandle, out module))
             {
                 Console.WriteLine("Attach module lookup: Toolhelp module snapshot");
                 return true;
             }
 
+            Console.WriteLine("Attach module lookup: trying virtual memory map");
             if (TryGetTargetModuleFromMemoryMap(processHandle, out module))
             {
                 Console.WriteLine("Attach module lookup: virtual memory map");
                 return true;
             }
 
+            Console.WriteLine("Attach module lookup: trying default image base");
             if (TryGetTargetModuleAtBase(processHandle, new IntPtr(EldenRingDefaultImageBase), out module))
             {
                 Console.WriteLine("Attach module lookup: default image base");
@@ -464,14 +471,22 @@ namespace TarnishedTool.Services
             var seenAllocations = new HashSet<IntPtr>();
             var address = IntPtr.Zero;
             TargetModuleInfo best = null;
+            var regions = 0;
+            var readableAllocations = 0;
+            var peCandidates = 0;
+            var scan = Stopwatch.StartNew();
 
-            while (address.ToInt64() >= 0 && address.ToInt64() < MaxUserAddress)
+            while (address.ToInt64() >= 0 &&
+                   address.ToInt64() < MaxUserAddress &&
+                   regions < MaxMemoryMapRegions &&
+                   scan.ElapsedMilliseconds < MaxMemoryMapScanMilliseconds)
             {
                 if (Kernel32.VirtualQueryEx(processHandle, address, out var mbi, mbiSize) == IntPtr.Zero)
                 {
                     break;
                 }
 
+                regions++;
                 var regionSize = mbi.RegionSize.ToInt64();
                 if (regionSize <= 0)
                 {
@@ -481,10 +496,12 @@ namespace TarnishedTool.Services
                 var allocationBase = mbi.AllocationBase != IntPtr.Zero ? mbi.AllocationBase : mbi.BaseAddress;
                 if (IsReadableRegion(mbi) && seenAllocations.Add(allocationBase))
                 {
+                    readableAllocations++;
                     var moduleSize = ReadRemoteModuleMemorySize(processHandle, allocationBase);
                     if (moduleSize >= MinimumMainModuleSize &&
                         (best == null || moduleSize > best.ModuleMemorySize))
                     {
+                        peCandidates++;
                         best = new TargetModuleInfo
                         {
                             BaseAddress = allocationBase,
@@ -502,6 +519,10 @@ namespace TarnishedTool.Services
 
                 address = new IntPtr(next);
             }
+
+            scan.Stop();
+            Console.WriteLine(
+                $@"Attach module lookup: memory map scanned {regions} regions, {readableAllocations} readable allocations, {peCandidates} PE candidates in {scan.ElapsedMilliseconds} ms");
 
             if (best == null)
             {
