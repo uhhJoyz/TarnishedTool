@@ -332,6 +332,7 @@ namespace TarnishedTool.Services
                 }
                 else
                 {
+                    Console.WriteLine($@"Attach target image path: {GetProcessImagePath(ProcessHandle) ?? "unknown"}");
                     if (TryGetTargetModule(ProcessHandle, processId, out var module))
                     {
                         BaseAddress = module.BaseAddress;
@@ -461,6 +462,7 @@ namespace TarnishedTool.Services
                 processId);
             if (snapshot == new IntPtr(-1))
             {
+                Console.WriteLine($@"Attach module lookup: Toolhelp snapshot failed, error={Marshal.GetLastWin32Error()}");
                 return false;
             }
 
@@ -473,6 +475,7 @@ namespace TarnishedTool.Services
 
                 if (!Kernel32.Module32First(snapshot, ref moduleEntry))
                 {
+                    Console.WriteLine($@"Attach module lookup: Module32First failed, error={Marshal.GetLastWin32Error()}");
                     return false;
                 }
 
@@ -535,6 +538,7 @@ namespace TarnishedTool.Services
             }
             catch
             {
+                Console.WriteLine("Attach module lookup: Toolhelp module snapshot threw an exception");
                 return false;
             }
             finally
@@ -565,6 +569,7 @@ namespace TarnishedTool.Services
 
                 if (status != 0 || processInfo.PebBaseAddress == IntPtr.Zero)
                 {
+                    Console.WriteLine($@"Attach module lookup: PEB query failed, status=0x{status:X}, peb=0x{(long)processInfo.PebBaseAddress:X}");
                     return false;
                 }
 
@@ -572,12 +577,14 @@ namespace TarnishedTool.Services
                 var imageBaseAddress = ReadRemote<IntPtr>(processHandle, imageBaseAddressPtr);
                 if (imageBaseAddress == IntPtr.Zero)
                 {
+                    Console.WriteLine($@"Attach module lookup: PEB image base was zero, peb=0x{(long)processInfo.PebBaseAddress:X}");
                     return false;
                 }
 
                 var moduleMemorySize = ReadRemoteModuleMemorySize(processHandle, imageBaseAddress);
                 if (moduleMemorySize <= 0)
                 {
+                    Console.WriteLine($@"Attach module lookup: PEB image base unreadable, imageBase=0x{(long)imageBaseAddress:X}");
                     return false;
                 }
 
@@ -591,6 +598,7 @@ namespace TarnishedTool.Services
             }
             catch
             {
+                Console.WriteLine("Attach module lookup: PEB lookup threw an exception");
                 return false;
             }
         }
@@ -623,6 +631,17 @@ namespace TarnishedTool.Services
             return GetFileVersion(filePath.ToString());
         }
 
+        private static string GetProcessImagePath(IntPtr processHandle)
+        {
+            const int MaxPath = 32767;
+
+            var size = MaxPath;
+            var filePath = new StringBuilder(size);
+            return Kernel32.QueryFullProcessImageName(processHandle, 0, filePath, ref size)
+                ? filePath.ToString()
+                : null;
+        }
+
         private static bool TryGetTargetModuleAtBase(
             IntPtr processHandle,
             IntPtr moduleBase,
@@ -640,6 +659,7 @@ namespace TarnishedTool.Services
                 var moduleMemorySize = ReadRemoteModuleMemorySize(processHandle, moduleBase);
                 if (moduleMemorySize <= 0)
                 {
+                    Console.WriteLine($@"Attach module lookup: base 0x{(long)moduleBase:X} is not a readable PE image");
                     return false;
                 }
 
@@ -653,6 +673,7 @@ namespace TarnishedTool.Services
             }
             catch
             {
+                Console.WriteLine($@"Attach module lookup: reading base 0x{(long)moduleBase:X} threw an exception");
                 return false;
             }
         }
@@ -697,7 +718,8 @@ namespace TarnishedTool.Services
 
             if (!Kernel32.ReadProcessMemory(processHandle, address, bytes, size, ref bytesRead))
             {
-                throw new InvalidOperationException();
+                throw new InvalidOperationException(
+                    $@"ReadProcessMemory failed at 0x{(long)address:X}, size={size}, bytesRead={bytesRead}, error={Marshal.GetLastWin32Error()}");
             }
 
             return MemoryMarshal.Read<T>(bytes);
