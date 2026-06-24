@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
@@ -33,6 +34,11 @@ namespace TarnishedTool.Services
         private const uint Th32csSnapmodule = 0x00000008;
         private const uint Th32csSnapmodule32 = 0x00000010;
         private const uint StillActive = 259;
+        private const uint MemCommitState = 0x1000;
+        private const uint PageNoAccess = 0x01;
+        private const uint PageGuard = 0x100;
+        private const long MaxUserAddress = 0x7FFFFFFF0000;
+        private const int MinimumMainModuleSize = 0x01000000;
         private const long EldenRingDefaultImageBase = 0x140000000;
         
         private const uint CodeCaveSize = 0x5000;
@@ -434,6 +440,12 @@ namespace TarnishedTool.Services
                 return true;
             }
 
+            if (TryGetTargetModuleFromMemoryMap(processHandle, out module))
+            {
+                Console.WriteLine("Attach module lookup: virtual memory map");
+                return true;
+            }
+
             if (TryGetTargetModuleAtBase(processHandle, new IntPtr(EldenRingDefaultImageBase), out module))
             {
                 Console.WriteLine("Attach module lookup: default image base");
@@ -442,6 +454,69 @@ namespace TarnishedTool.Services
 
             Console.WriteLine("Attach module lookup failed: no readable Elden Ring module found");
             return false;
+        }
+
+        private static bool TryGetTargetModuleFromMemoryMap(IntPtr processHandle, out TargetModuleInfo module)
+        {
+            module = null;
+
+            var mbiSize = new IntPtr(Marshal.SizeOf(typeof(Kernel32.MemoryBasicInformation)));
+            var seenAllocations = new HashSet<IntPtr>();
+            var address = IntPtr.Zero;
+            TargetModuleInfo best = null;
+
+            while (address.ToInt64() >= 0 && address.ToInt64() < MaxUserAddress)
+            {
+                if (Kernel32.VirtualQueryEx(processHandle, address, out var mbi, mbiSize) == IntPtr.Zero)
+                {
+                    break;
+                }
+
+                var regionSize = mbi.RegionSize.ToInt64();
+                if (regionSize <= 0)
+                {
+                    break;
+                }
+
+                var allocationBase = mbi.AllocationBase != IntPtr.Zero ? mbi.AllocationBase : mbi.BaseAddress;
+                if (IsReadableRegion(mbi) && seenAllocations.Add(allocationBase))
+                {
+                    var moduleSize = ReadRemoteModuleMemorySize(processHandle, allocationBase);
+                    if (moduleSize >= MinimumMainModuleSize &&
+                        (best == null || moduleSize > best.ModuleMemorySize))
+                    {
+                        best = new TargetModuleInfo
+                        {
+                            BaseAddress = allocationBase,
+                            ModuleMemorySize = moduleSize,
+                            FileVersion = GetProcessFileVersion(processHandle)
+                        };
+                    }
+                }
+
+                var next = mbi.BaseAddress.ToInt64() + regionSize;
+                if (next <= address.ToInt64())
+                {
+                    break;
+                }
+
+                address = new IntPtr(next);
+            }
+
+            if (best == null)
+            {
+                return false;
+            }
+
+            module = best;
+            return true;
+        }
+
+        private static bool IsReadableRegion(Kernel32.MemoryBasicInformation mbi)
+        {
+            return mbi.State == MemCommitState &&
+                   (mbi.Protect & PageNoAccess) == 0 &&
+                   (mbi.Protect & PageGuard) == 0;
         }
 
         private static bool TryGetTargetModuleFromSnapshot(
